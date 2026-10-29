@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apparel Inventory Optimization | Rutgers Track & Field</title>
+<meta name="description" content="Projection model for apparel purchasing: bulk ordering, size forecasting and replacement cycles for an 84-athlete track & field program.">
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+<style>
+  :root {
+    --scarlet: #cc0033;
+    --scarlet-dark: #9b0026;
+    --ink: #1c1f26;
+    --muted: #5b6270;
+    --line: #e6e8ec;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --good: #1f8a5b;
+    --warn-bg: #fff8e6;
+    --warn-line: #f1c35b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--scarlet); }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: 1120px; margin: 0 auto; padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .brand { font-weight: 700; letter-spacing: .02em; font-size: 15px; }
+  .brand span { color: var(--scarlet); }
+  .nav { display: flex; gap: 20px; font-size: 14px; }
+  .nav a { color: var(--muted); text-decoration: none; font-weight: 500; }
+  .nav a:hover { color: var(--scarlet); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    background: radial-gradient(1200px 400px at 85% -10%, rgba(255,255,255,.14), transparent 60%),
+                linear-gradient(135deg, var(--scarlet) 0%, var(--scarlet-dark) 100%);
+    color: #fff;
+  }
+  .hero-inner { max-width: 1120px; margin: 0 auto; padding: 56px 24px 72px; }
+  .eyebrow {
+    display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; padding: 5px 12px; border-radius: 999px;
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+  }
+  .hero h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.12; margin: 18px 0 14px; letter-spacing: -.02em; }
+  .hero p { max-width: 720px; font-size: 18px; opacity: .93; }
+  .hero-meta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { font-size: 13px; padding: 6px 12px; border-radius: 8px; background: rgba(0,0,0,.18); }
+
+  main { max-width: 1120px; margin: -40px auto 0; padding: 0 24px 56px; }
+
+  /* ---------- KPI cards ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .kpi {
+    background: var(--card); border-radius: var(--radius); padding: 22px 22px 20px;
+    box-shadow: 0 6px 24px rgba(20,24,40,.08); border: 1px solid var(--line);
+    border-top: 4px solid var(--scarlet);
+  }
+  .kpi-label { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .kpi-value { font-size: 40px; font-weight: 800; letter-spacing: -.02em; margin: 8px 0 2px; }
+  .kpi-note { font-size: 14px; color: var(--muted); }
+  .tag {
+    display: inline-block; margin-top: 12px; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 6px;
+  }
+  .tag.projected { background: #fdecef; color: var(--scarlet-dark); }
+  .tag.target { background: #eaf4ff; color: #1c5fa8; }
+
+  /* ---------- sections & cards ---------- */
+  section { margin-top: 44px; }
+  .section-head { margin-bottom: 18px; }
+  .section-head h2 { font-size: 24px; letter-spacing: -.01em; }
+  .section-head p { color: var(--muted); max-width: 760px; margin-top: 4px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px; box-shadow: 0 2px 10px rgba(20,24,40,.04);
+  }
+  .card h3 { font-size: 16px; margin-bottom: 2px; }
+  .card .sub { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .takeaway {
+    margin-top: 10px; padding: 10px 12px; font-size: 14px; border-radius: 8px;
+    background: #f3f5f8; color: #2a2f3a;
+  }
+  .takeaway b { color: var(--scarlet-dark); }
+
+  /* ---------- recommendations ---------- */
+  .recs { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .rec { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+  .rec .num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--scarlet); color: #fff;
+    display: grid; place-items: center; font-weight: 700; margin-bottom: 12px;
+  }
+  .rec h3 { font-size: 17px; margin-bottom: 6px; }
+  .rec p { font-size: 14.5px; color: #3b4150; }
+
+  /* ---------- assumptions ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  td.k { font-weight: 600; white-space: nowrap; }
+  .pill { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .pill.real { background: #e6f5ee; color: #17694a; }
+  .pill.assumed { background: #fff2d6; color: #8a5a00; }
+  .pill.sim { background: #eceff4; color: #4a5160; }
+
+  .notice {
+    margin-top: 18px; padding: 16px 18px; border-radius: 10px;
+    background: var(--warn-bg); border: 1px solid var(--warn-line); font-size: 14.5px; color: #5d4600;
+  }
+
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 24px 40px; }
+
+  @media (max-width: 820px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .nav { display: none; }
+    td.k { white-space: normal; }
+  }
+  @media print {
+    .topbar { display: none; }
+    body { background: #fff; }
+    .kpi, .card, .rec { box-shadow: none; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">Rutgers <span>Track &amp; Field</span> &middot; Inventory Analytics</div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#results">Results</a>
+      <a href="#demand">Demand</a>
+      <a href="#plan">Plan</a>
+      <a href="#method">Method</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow">Projection model</span>
+    <h1>Buying apparel smarter for an 84-athlete program</h1>
+    <p>A model of how bulk ordering, size forecasting and planned replacement cycles could lower apparel spend and cut last-minute orders, built from the team's baseline budget and roster.</p>
+    <div class="hero-meta">
+      <span class="chip">84 athletes: 43 women, 41 men</span>
+      <span class="chip">Python analysis</span>
+      <span class="chip">Interactive Plotly dashboard</span>
+    </div>
+  </div>
+</div>
+
+<main>
+
+  <div class="kpis" id="results">
+    <div class="kpi">
+      <div class="kpi-label">Projected annual savings</div>
+      <div class="kpi-value">$8,305</div>
+      <div class="kpi-note">About 20% of a $42,000 budget</div>
+      <span class="tag projected">Projected</span>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Emergency orders</div>
+      <div class="kpi-value">32 &rarr; 19</div>
+      <div class="kpi-note">A 40% reduction per year</div>
+      <span class="tag projected">Projected</span>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Bulk-order discount</div>
+      <div class="kpi-value">19%</div>
+      <div class="kpi-note">Applied to a $52 average item cost</div>
+      <span class="tag projected">Assumption</span>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Day-one availability</div>
+      <div class="kpi-value">95%</div>
+      <div class="kpi-note">Goal for size-matched stock</div>
+      <span class="tag target">Target</span>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>Where the savings come from</h2>
+      <p>Moving purchases to one September bulk order captures a volume discount on the same number of items. Fewer rush orders cut rush fees on top of that.</p>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Annual apparel budget</h3>
+        <div class="sub">Current vs. projected, same number of items</div>
+        <div id="budgetChart" role="img" aria-label="Bar chart: current annual budget $42,000 versus projected $34,020"></div>
+        <div class="takeaway"><b>$7,980</b> from bulk pricing, plus <b>$325</b> in avoided rush fees (13 fewer emergency orders at $25 each).</div>
+      </div>
+      <div class="card">
+        <h3>Emergency orders per year</h3>
+        <div class="sub">Current vs. projected with planned replacement</div>
+        <div id="ordersChart" role="img" aria-label="Bar chart: 32 emergency orders now versus 19 projected"></div>
+        <div class="takeaway">Tracking replacement dates lets staff reorder before gear wears out, not after.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="demand">
+    <div class="section-head">
+      <h2>What the team needs and when</h2>
+      <p>Sizes, events and seasonal demand decide what to stock. These charts use the model's simulated athlete data.</p>
+    </div>
+    <div class="card">
+      <h3>Size distribution by team</h3>
+      <div class="sub">Number of athletes per apparel size (simulated)</div>
+      <div id="sizeChart" role="img" aria-label="Grouped bar chart of apparel sizes for the women's and men's teams"></div>
+      <div class="takeaway">Women's team: stock mostly <b>S and M</b> (33 of 43 athletes, 77%). Men's team: focus on <b>M and L</b> (28 of 41 athletes, 68%).</div>
+    </div>
+    <div class="grid-2" style="margin-top:20px">
+      <div class="card">
+        <h3>Team makeup by event group</h3>
+        <div class="sub">Share of 84 athletes (simulated)</div>
+        <div id="eventChart" role="img" aria-label="Donut chart of athletes by event group"></div>
+      </div>
+      <div class="card">
+        <h3>How long each item lasts</h3>
+        <div class="sub">Average replacement cycle in months</div>
+        <div id="lifecycleChart" role="img" aria-label="Horizontal bar chart of replacement cycle length by equipment type"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h3>Seasonal demand</h3>
+      <div class="sub">Relative demand index by month (100 = peak)</div>
+      <div id="seasonalChart" role="img" aria-label="Line chart of monthly demand with September to October highlighted as the bulk order window"></div>
+      <div class="takeaway">Demand dips in summer and rebuilds in September, so <b>September to October</b> is the natural window for the annual bulk order.</div>
+    </div>
+  </section>
+
+  <section id="plan">
+    <div class="section-head">
+      <h2>Recommended plan</h2>
+    </div>
+    <div class="recs">
+      <div class="rec">
+        <div class="num">1</div>
+        <h3>Order once, in September</h3>
+        <p>Consolidate purchasing into a single bulk order before the season builds, to earn the volume discount.</p>
+      </div>
+      <div class="rec">
+        <div class="num">2</div>
+        <h3>Stock by forecasted size</h3>
+        <p>Order from the roster's size mix plus a 10% buffer instead of equal quantities of every size.</p>
+      </div>
+      <div class="rec">
+        <div class="num">3</div>
+        <h3>Replace on a schedule</h3>
+        <p>Competition spikes wear out in 6 to 8 months. Track issue dates and keep buffer stock so replacements are planned, not rushed.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="method">
+    <div class="section-head">
+      <h2>How the numbers were built</h2>
+      <p>The savings are a projection. This table separates what came from the team from what the model assumes.</p>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Input</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Roster size</td><td>84 athletes (43 women, 41 men)</td><td><span class="pill real">Team baseline</span></td></tr>
+          <tr><td class="k">Annual apparel budget</td><td>$42,000</td><td><span class="pill real">Team baseline</span></td></tr>
+          <tr><td class="k">Emergency orders per year</td><td>32</td><td><span class="pill real">Team baseline</span></td></tr>
+          <tr><td class="k">Bulk-order discount</td><td>19%</td><td><span class="pill assumed">Assumption</span></td></tr>
+          <tr><td class="k">Reduction in emergency orders</td><td>40%</td><td><span class="pill assumed">Assumption</span></td></tr>
+          <tr><td class="k">Rush fee per emergency order</td><td>$25</td><td><span class="pill assumed">Assumption</span></td></tr>
+          <tr><td class="k">Athlete sizes and replacement dates</td><td>Per-athlete values</td><td><span class="pill sim">Simulated</span></td></tr>
+          <tr><td class="k">Seasonal demand index</td><td>Monthly values, 35 to 100</td><td><span class="pill sim">Modeled</span></td></tr>
+        </tbody>
+      </table>
+      <div class="notice">
+        <b>Read this as a scenario, not a result.</b> The savings figure comes from applying the assumed 19% discount and 40% reduction to the team's baseline. Actual savings would depend on the vendor's real pricing and on follow-through. The plan's first step would be to confirm the discount with the vendor.
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Kayla Damoah &middot; Rutgers University, Business Analytics &amp; Information Technology
+</footer>
+
+<script>
+  const SCARLET = '#cc0033', INK = '#1c1f26', MUTED = '#5b6270', GRID = '#eceef2', GREEN = '#1f8a5b', SLATE = '#2f3542';
+  const baseLayout = {
+    font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif', color: INK, size: 13 },
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    margin: { t: 16, r: 16, b: 48, l: 56 },
+    xaxis: { gridcolor: GRID, zeroline: false, linecolor: GRID },
+    yaxis: { gridcolor: GRID, zeroline: false, linecolor: GRID },
+    hoverlabel: { font: { family: 'inherit' } },
+  };
+  const cfg = { responsive: true, displayModeBar: false };
+  const L = (extra) => Object.assign({}, baseLayout, extra);
+
+  // 1. Budget: current vs projected
+  Plotly.newPlot('budgetChart', [{
+    x: ['Current', 'Projected'], y: [42000, 34020], type: 'bar',
+    marker: { color: [SLATE, SCARLET] },
+    text: ['$42,000', '$34,020'], textposition: 'outside', cliponaxis: false,
+    hovertemplate: '%{x}: %{y:$,.0f}<extra></extra>', width: [0.5, 0.5],
+  }], L({ height: 320, yaxis: Object.assign({}, baseLayout.yaxis, { range: [0, 50000], tickprefix: '$', separatethousands: true }) }), cfg);
+
+  // 2. Emergency orders
+  Plotly.newPlot('ordersChart', [{
+    x: ['Current', 'Projected'], y: [32, 19], type: 'bar',
+    marker: { color: [SLATE, SCARLET] },
+    text: ['32', '19'], textposition: 'outside', cliponaxis: false,
+    hovertemplate: '%{x}: %{y} orders<extra></extra>', width: [0.5, 0.5],
+  }], L({ height: 320, yaxis: Object.assign({}, baseLayout.yaxis, { range: [0, 40], title: { text: 'Orders per year' } }) }), cfg);
+
+  // 3. Size distribution
+  Plotly.newPlot('sizeChart', [
+    { x: ['XS', 'S', 'M', 'L', 'XL'], y: [8, 21, 12, 2, 0], name: "Women's team", type: 'bar', marker: { color: SCARLET } },
+    { x: ['XS', 'S', 'M', 'L', 'XL'], y: [0, 10, 19, 9, 3], name: "Men's team", type: 'bar', marker: { color: SLATE } },
+  ], L({ barmode: 'group', height: 360, legend: { orientation: 'h', y: 1.12, x: 0 },
+        xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Apparel size' } }),
+        yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Athletes' } }) }), cfg);
+
+  // 4. Event groups (donut)
+  Plotly.newPlot('eventChart', [{
+    values: [36, 18, 12, 8, 8, 2],
+    labels: ['Distance', 'Sprints', 'Jumps', 'Throws', 'Javelin / Pole Vault', 'Multi-events'],
+    type: 'pie', hole: 0.58, sort: false,
+    marker: { colors: ['#cc0033', '#2f3542', '#e0607a', '#6b7385', '#f0a3b3', '#b8bfcc'], line: { color: '#fff', width: 2 } },
+    textinfo: 'percent', hovertemplate: '%{label}: %{value} athletes (%{percent})<extra></extra>',
+  }], L({ height: 340, margin: { t: 8, r: 8, b: 8, l: 8 }, showlegend: true, legend: { orientation: 'h', y: -0.05 },
+         annotations: [{ text: '<b>84</b><br>athletes', showarrow: false, font: { size: 18 } }] }), cfg);
+
+  // 5. Lifecycle (horizontal, longest first)
+  Plotly.newPlot('lifecycleChart', [{
+    y: ['Travel bags', 'Competition uniforms', 'Warm-up suits', 'Training gear', 'Competition spikes'],
+    x: [36, 24, 21, 12, 7], type: 'bar', orientation: 'h',
+    marker: { color: [SLATE, SLATE, SLATE, '#e0607a', SCARLET] },
+    text: ['36+', '24+', '18 to 24', '12', '6 to 8'], textposition: 'outside', cliponaxis: false,
+    hovertemplate: '%{y}: about %{x} months<extra></extra>',
+  }], L({ height: 340, margin: { t: 8, r: 40, b: 48, l: 150 },
+         xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Months' }, range: [0, 44] }) }), cfg);
+
+  // 6. Seasonal demand with bulk-order window
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  Plotly.newPlot('seasonalChart', [{
+    x: months, y: [75, 85, 90, 95, 100, 40, 35, 50, 85, 80, 45, 40], type: 'scatter', mode: 'lines+markers',
+    line: { color: SCARLET, width: 3, shape: 'spline' }, marker: { size: 8, color: SCARLET },
+    fill: 'tozeroy', fillcolor: 'rgba(204,0,51,0.08)', hovertemplate: '%{x}: %{y}<extra></extra>',
+  }], L({ height: 360,
+    yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Demand index' }, range: [0, 110] }),
+    shapes: [{ type: 'rect', xref: 'x', yref: 'paper', x0: 7.5, x1: 9.5, y0: 0, y1: 1, fillcolor: GREEN, opacity: 0.12, line: { width: 0 } }],
+    annotations: [{ x: 8.5, y: 108, xref: 'x', yref: 'y', text: 'Bulk order window', showarrow: false, font: { color: GREEN, size: 13 } }],
+  }), cfg);
+</script>
+</body>
+</html>
